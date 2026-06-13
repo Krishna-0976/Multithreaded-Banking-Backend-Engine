@@ -276,8 +276,8 @@ g++ -std=c++17 -pthread -Iinclude src/*.cpp -o bank_system
 
 ---
 
-## 👨‍💻 Author
+👨‍💻 **Author**
 
-**Krishna Parmar**
-B.Tech ICT Student
-Dhirubhai Ambani University
+* **Name:** Krishna Parmar
+* **Degree:** B.Tech in Information and Communication Technology
+* **Institution:** Dhirubhai Ambani Institute of Information and Communication Technology
