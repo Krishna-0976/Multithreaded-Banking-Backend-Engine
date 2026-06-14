@@ -201,7 +201,7 @@ BANKING_SYSTEM/
 ├── .gitignore
 ├── ledger.txt
 └── run.bat
-
+```
 ## 🔬 Stress Testing
 
 The system includes a randomized transaction simulator designed to emulate real-world banking traffic under heavy concurrent load.
