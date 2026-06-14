@@ -183,28 +183,24 @@ Designed to simulate the core architecture of real-world financial transaction e
 ## 📂 Project Structure
 
 ```text
-Multithreaded-Banking-Backend-Engine/
+BANKING_SYSTEM/
 │
 ├── include/
-│   ├── bank_account.h
-│   ├── transaction.h
-│   ├── thread_pool.h
-│   ├── logger.h
-│   └── audit.h
+│   ├── bank.hpp
+│   ├── logger.hpp
+│   ├── queue.hpp
+│   └── thread_pool.hpp
 │
 ├── src/
-│   ├── bank_account.cpp
-│   ├── thread_pool.cpp
+│   ├── bank.cpp
 │   ├── logger.cpp
-│   ├── audit.cpp
+│   ├── queue.cpp
+│   ├── thread_pool.cpp
 │   └── main.cpp
 │
+├── .gitignore
 ├── ledger.txt
-├── README.md
-└── Makefile
-```
-
----
+└── run.bat
 
 ## 🔬 Stress Testing
 
