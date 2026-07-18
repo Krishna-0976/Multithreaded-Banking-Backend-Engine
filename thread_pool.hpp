@@ -11,7 +11,7 @@ public:
     ~ThreadPool();
 
 private:
-    std::vector<std::thread> workers;
+    vector<thread> workers;
     TransactionQueue& queue;
     void worker_routine();
 };

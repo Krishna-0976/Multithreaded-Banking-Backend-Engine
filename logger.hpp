@@ -8,26 +8,28 @@
 #include <fstream>
 #include <thread>
 
+using namespace std;
+
 class AsyncLogger {
 public:
-    AsyncLogger(const std::string& filename, size_t capacity = 4096);
+    AsyncLogger(const string& filename, size_t capacity = 4096);
     ~AsyncLogger();
-    void log(const std::string& message);
+
+    void log(const string& message);
     void shutdown();
 
 private:
-    std::string file_path;
-    std::vector<std::string> log_queue;
+    string file_path;
     size_t capacity;
     size_t head;
     size_t tail;
-    size_t size;
+    size_t count;
     bool is_shutdown;
-    
-    std::mutex mtx;
-    std::condition_variable not_empty;
-    std::condition_variable not_full;
-    std::thread worker_thread;
+    vector<string> log_queue;
+    mutex mtx;
+    condition_variable not_empty;
+    condition_variable not_full;
+    thread worker_thread;
 
     void process_logs();
 };

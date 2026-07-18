@@ -14,15 +14,15 @@ public:
     void shutdown();
 
 private:
-    std::vector<TransactionTask> tasks;
     size_t capacity;
     size_t head;
     size_t tail;
-    size_t size;
+    size_t count;
     bool is_shutdown;
-    std::mutex mtx;
-    std::condition_variable not_empty;
-    std::condition_variable not_full;
+    vector<TransactionTask> tasks;
+    mutex mtx;
+    condition_variable not_empty;
+    condition_variable not_full;
 };
 
 #endif

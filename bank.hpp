@@ -4,12 +4,16 @@
 #include <cstdint>
 #include <mutex>
 
+using namespace std;
+
+using Cents = int64_t;
+
 struct alignas(64) BankAccount {
     uint64_t account_id;
-    double balance;
-    std::mutex m;
+    Cents balance;
+    mutex m;
 
-    BankAccount(uint64_t id, double bal) : account_id(id), balance(bal) {}
+    BankAccount(uint64_t id, Cents bal) : account_id(id), balance(bal) {}
 };
 
 enum class TransactionType {
@@ -20,14 +24,17 @@ enum class TransactionType {
 
 struct TransactionTask {
     TransactionType type;
-    BankAccount* from_account;
-    BankAccount* to_account;
-    double amount;
-    uint64_t transaction_id;
+    BankAccount* from_account = nullptr;
+    BankAccount* to_account = nullptr;
+    Cents amount = 0;
+    uint64_t transaction_id = 0;
 };
 
-bool deposit(BankAccount& account, double amount);
-bool withdraw(BankAccount& account, double amount);
-bool transfer(BankAccount& from, BankAccount& to, double amount);
+bool deposit(BankAccount& account, Cents amount);
+bool withdraw(BankAccount& account, Cents amount);
+bool transfer(BankAccount& from, BankAccount& to, Cents amount);
+
+Cents dollars_to_cents(double dollars);
+double cents_to_dollars(Cents cents);
 
 #endif
