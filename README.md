@@ -1,149 +1,50 @@
 # 🏦 Multithreaded Banking Backend Engine
 
-A high-performance concurrent banking backend built in **C++17** that safely processes thousands of simultaneous financial transactions using advanced synchronization mechanisms, deadlock prevention strategies, asynchronous logging, and crash recovery techniques.
+A high-performance concurrent banking backend built in **C++17** that safely processes thousands of simultaneous financial transactions using thread pooling, deadlock-free multi-account locking, asynchronous write-ahead logging, and ledger-replay crash recovery.
 
-Designed to simulate the core architecture of real-world financial transaction engines, this project demonstrates practical applications of **Object-Oriented Programming (OOP), Data Structures & Algorithms (DSA), Operating Systems, Concurrency, Systems Programming, and Fault-Tolerant Software Design**.
+Built to demonstrate practical **Concurrency, Operating Systems, Data Structures & Algorithms, and Fault-Tolerant Systems Design** concepts on top of modern C++.
 
 ---
 
 ## 🎯 Project Objectives
 
-* Design a highly concurrent banking backend capable of processing thousands of transactions safely.
-* Eliminate race conditions and deadlocks in shared account operations.
-* Minimize transaction latency through reusable worker threads and asynchronous logging.
-* Ensure durability and recoverability through persistent transaction records.
-* Demonstrate real-world systems programming and concurrency concepts using modern C++.
+- Process thousands of concurrent transactions with zero data races, deadlocks, or lost funds.
+- Eliminate race conditions and deadlocks in shared multi-account operations.
+- Minimize transaction latency via a reusable worker thread pool and asynchronous logging.
+- Persist a durable, replayable record of every transaction (a write-ahead log).
+- **Actually reconstruct account state from that log** — not just log to a file, but prove the log is sufficient to rebuild the system after a simulated crash.
 
 ---
 
 ## 🚀 Key Features
 
 ### ⚡ Fixed-Size Reusable Thread Pool
+- Pre-spawns worker threads once at startup; no per-transaction thread creation.
+- Workers pull from a shared bounded queue until it's drained and shut down.
 
-* Pre-spawns a pool of worker threads during startup.
-* Eliminates expensive thread creation and destruction overhead.
-* Idle workers automatically sleep and wake on demand.
-* Maximizes throughput under heavy transaction loads.
-
-### 🔒 Thread-Safe Transaction Queue
-
-* Implemented using a bounded circular buffer.
-* Protected using mutexes and condition variables.
-* Guarantees safe producer-consumer communication.
-* Prevents race conditions during task scheduling.
+### 🔒 Thread-Safe Bounded Transaction Queue
+- Circular buffer protected by a mutex + two condition variables (`not_empty` / `not_full`).
+- Blocks producers when full, blocks consumers when empty, and unblocks all waiters cleanly on `shutdown()`.
 
 ### 🛡 Deadlock-Free Fund Transfers
-
-* Supports concurrent transfers between multiple bank accounts.
-* Uses `std::scoped_lock` to atomically acquire multiple account locks.
-* Eliminates circular wait conditions.
-* Guarantees deadlock-free transaction execution.
-* Performs thread-safe balance validation before executing transfers.
-* Rejects transactions with insufficient funds while preserving system consistency.
+- Concurrent transfers between arbitrary account pairs use `std::scoped_lock(from.m, to.m)`, which acquires both mutexes using the standard library's built-in deadlock-avoidance algorithm — safe regardless of lock order or which thread reaches which account first.
+- Balance checks happen after both locks are held, so transfers with insufficient funds are rejected without any partial effect.
 
 ### 📝 Asynchronous Write-Ahead Logging (WAL)
+- Every transaction attempt (success or failure) is appended to `ledger.txt` in a compact, machine-parseable format: `tx_id|TYPE|from_id|to_id|amount_cents|STATUS`.
+- A dedicated logger thread owns all file I/O, so worker threads never block on disk.
 
-* Decouples transaction execution from disk I/O.
-* Worker threads immediately return to processing after completing transfers.
-* Dedicated logging thread writes transaction records in the background.
-* Minimizes latency caused by storage operations.
+### 🔄 Crash Recovery (real, not aspirational)
+- `recovery.{hpp,cpp}` parses the ledger back into structured entries and replays every `SUCCESS` entry onto a fresh set of accounts.
+- `main.cpp` demonstrates this end-to-end: it runs the live stress test, then throws away the in-memory account state, rebuilds a second set of accounts from only their starting balances and `ledger.txt`, and asserts the recovered balances match the live ones exactly.
+- Malformed or truncated lines (as you'd expect from a real crash mid-write) are skipped safely rather than crashing recovery.
 
-### 🔄 Crash Recovery Mechanism
-
-* Stores transaction history persistently in a ledger file.
-* Supports state reconstruction through transaction replay.
-* Protects against data loss caused by crashes or power failures.
-* Inspired by durability techniques used in database systems.
+### 💰 Integer-Cents Money Handling
+- All balances and transaction amounts are `int64_t` cents (`Cents` type alias), never `double`. Floating-point currency accumulates rounding error under volume; integer cents give exact arithmetic. Dollar amounts only exist at the I/O boundary (`dollars_to_cents` / `cents_to_dollars`).
 
 ### 📊 Lock-Free Integrity Auditing
-
-* Uses `std::atomic` primitives for consistency verification.
-* Enables real-time auditing without pausing active transfers.
-* Prevents audits from becoming a performance bottleneck.
-* Maintains global balance invariants under concurrent workloads.
-
----
-
-## 🏗 System Architecture
-
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    MULTITHREADED BANKING SYSTEM                            │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-
-                    ┌──────────────────────────┐
-                    │ Incoming Transactions    │
-                    │ (Deposits / Transfers)   │
-                    └────────────┬─────────────┘
-                                 │
-                                 ▼
-
-          ┌─────────────────────────────────────────────┐
-          │ Transaction Dispatcher                      │
-          │ Validates & Queues Incoming Requests        │
-          └─────────────────┬───────────────────────────┘
-                            │
-                            ▼
-
-          ┌─────────────────────────────────────────────┐
-          │ Thread-Safe Circular Buffer Queue           │
-          │ Mutex + Condition Variable Protected        │
-          └─────────────────┬───────────────────────────┘
-                            │
-        ┌───────────────────┼───────────────────┐
-        │                   │                   │
-        ▼                   ▼                   ▼
-
- ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
- │ Worker T1   │     │ Worker T2   │ ... │ Worker TN   │
- └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-        │                   │                   │
-        └──────────────┬────┴────┬──────────────┘
-                       │         │
-                       ▼         ▼
-
-          ┌─────────────────────────────────────────────┐
-          │ Deadlock-Free Transfer Engine               │
-          │ std::scoped_lock Multi-Account Locking      │
-          └─────────────────┬───────────────────────────┘
-                            │
-                            ▼
-
-          ┌─────────────────────────────────────────────┐
-          │ Account Database (In-Memory State)          │
-          │ Account Balances + Synchronization Primitives│
-          └──────────────┬──────────────────────────────┘
-                         │
-         ┌───────────────┴────────────────┐
-         │                                │
-         ▼                                ▼
-
-┌─────────────────────┐      ┌─────────────────────────┐
-│ Atomic Audit Layer  │      │ Write-Ahead Log Queue   │
-│ Real-Time Integrity │      │ Non-Blocking Logging    │
-│ Verification        │      └────────────┬────────────┘
-└──────────┬──────────┘                   │
-           │                              ▼
-           │                 ┌─────────────────────────┐
-           │                 │ Dedicated Logger Thread │
-           │                 └────────────┬────────────┘
-           │                              │
-           ▼                              ▼
-
-┌─────────────────────┐      ┌─────────────────────────┐
-│ Consistency Reports │      │ ledger.txt              │
-│ Total Funds Audit   │      │ Persistent Transaction  │
-└─────────────────────┘      │ History                 │
-                             └────────────┬────────────┘
-                                          │
-                                          ▼
-
-                             ┌─────────────────────────┐
-                             │ Crash Recovery Engine   │
-                             │ Log Replay Mechanism    │
-                             └─────────────────────────┘
-```
+- A single `std::atomic<int64_t> global_net_change` tracks the bank's net inflow/outflow via `fetch_add`/`fetch_sub` — genuine lock-free hardware atomics, not a CAS-retry loop.
+- `main.cpp` compares the audited expected total against the sum of actual final balances for an exact-match integrity check.
 
 ---
 
@@ -152,128 +53,76 @@ Designed to simulate the core architecture of real-world financial transaction e
 | Concept                    | Implementation                                                     |
 | -------------------------- | ------------------------------------------------------------------ |
 | Thread Pooling             | Fixed reusable worker threads                                      |
-| Producer-Consumer Pattern  | Transaction queue architecture                                     |
+| Producer-Consumer Pattern  | Bounded transaction queue                                          |
 | Mutual Exclusion           | `std::mutex`                                                       |
-| RAII-Based Lock Management | `std::scoped_lock` automatically releases locks when leaving scope |
+| RAII-Based Lock Management | `std::scoped_lock` / `std::lock_guard`                              |
 | Condition Synchronization  | `std::condition_variable`                                          |
-| Deadlock Prevention        | `std::scoped_lock`                                                 |
-| Lock-Free Operations       | `std::atomic`                                                      |
+| Deadlock Prevention        | `std::scoped_lock`'s built-in lock-order-agnostic acquisition       |
+| Lock-Free Operations       | `std::atomic<int64_t>`                                              |
 | Asynchronous Processing    | Dedicated logger thread                                            |
 | Fault Tolerance            | Write-Ahead Logging                                                |
-| Crash Recovery             | Ledger replay mechanism                                            |
-| Resource Coordination      | Multi-resource locking                                             |
-
----
-
-## ⚙️ Technologies Used
-
-* C++17
-* GNU Compiler Collection (GCC)
-* Standard Template Library (STL)
-* Multithreading (`<thread>`)
-* Mutexes (`<mutex>`)
-* Condition Variables (`<condition_variable>`)
-* Atomic Operations (`<atomic>`)
-* File Streams (`<fstream>`)
-* Producer-Consumer Design Pattern
-* Write-Ahead Logging (WAL)
+| Crash Recovery             | Ledger parsing + replay onto fresh state                           |
 
 ---
 
 ## 📂 Project Structure
 
-```text
-BANKING_SYSTEM/
-│
-├── include/
-│   ├── bank.hpp
-│   ├── logger.hpp
-│   ├── queue.hpp
-│   └── thread_pool.hpp
-│
-├── src/
-│   ├── bank.cpp
-│   ├── logger.cpp
-│   ├── queue.cpp
-│   ├── thread_pool.cpp
-│   └── main.cpp
-│
-├── .gitignore
-├── ledger.txt
-└── run.bat
 ```
-## 🔬 Stress Testing
-
-The system includes a randomized transaction simulator designed to emulate real-world banking traffic under heavy concurrent load.
-
-### Test Configuration
-
-* Multiple bank accounts
-* Randomized transaction amounts
-* Concurrent transfer requests
-* Parallel worker execution
-* Real-time consistency audits
-
-### Results
-
-| Metric                 | Result      |
-| ---------------------- | ----------- |
-| Transactions Processed | 10,000+     |
-| Processing Time        | ~100–150 ms |
-| Data Races             | 0           |
-| Deadlocks              | 0           |
-| Lost Funds             | 0           |
-| Audit Failures         | 0           |
-| Consistency Accuracy   | 100%        |
-
----
-
-## 📈 Performance Highlights
-
-* Processes thousands of concurrent operations within milliseconds.
-* Maintains consistency under heavy thread contention.
-* Eliminates deadlock scenarios through coordinated locking.
-* Supports continuous auditing without blocking transaction flow.
-* Reduces thread-management overhead through resource recycling.
-* Demonstrates scalable backend transaction processing techniques.
-
----
-
-## 🎯 Learning Outcomes
-
-This project explores practical concepts commonly found in:
-
-* Banking Platforms
-* Payment Processing Systems
-* Trading Engines
-* Database Systems
-* Distributed Services
-* High-Performance Backend Infrastructure
-
-Key areas of focus include:
-
-* Concurrent Programming
-* Operating System Synchronization
-* Thread Scheduling
-* Deadlock Prevention
-* Fault-Tolerant System Design
-* Performance Optimization
-* Data Consistency Guarantees
+BANKING_SYSTEM/
+├── bank.hpp / bank.cpp                  # Account model, deposit/withdraw/transfer
+├── queue.hpp / queue.cpp                # Thread-safe bounded transaction queue
+├── thread_pool.hpp / thread_pool.cpp    # Worker pool, executes tasks, writes to ledger
+├── logger.hpp / logger.cpp              # Asynchronous write-ahead logger
+├── recovery.hpp / recovery.cpp          # Ledger parsing + replay (crash recovery)
+├── main.cpp                             # Stress test + live crash-recovery demo
+├── tests/
+│   └── test_bank.cpp                    # Dependency-free unit + concurrency tests
+├── .gitignore
+├── LICENSE
+└── README.md
+```
 
 ---
 
 ## ▶️ Build & Run
 
+### Engine + stress test + recovery demo
 ```bash
-g++ -std=c++17 -pthread -Iinclude src/*.cpp -o bank_system
-
+g++ -std=c++17 -Wall -pthread bank.cpp queue.cpp thread_pool.cpp logger.cpp recovery.cpp main.cpp -o bank_system
 ./bank_system
 ```
+
+### Tests
+```bash
+g++ -std=c++17 -Wall -I. -pthread tests/test_bank.cpp bank.cpp queue.cpp recovery.cpp -o tests/test_bank
+./tests/test_bank
+```
+14 test cases / 34 assertions covering deposit/withdraw/transfer edge cases, concurrent transfers (money-conservation under contention), queue FIFO + shutdown behavior, and ledger format round-trip + replay correctness — including malformed-line handling and unknown-account-id safety.
+
+---
+
+## 🔬 Stress Test Results (representative run)
+
+| Metric                              | Result             |
+| ------------------------------------ | ------------------ |
+| Transactions Processed               | 10,000             |
+| Processing Time                      | ~15–25 ms          |
+| Data Races                           | 0                  |
+| Deadlocks                            | 0                  |
+| Lost Funds                           | 0                  |
+| Recovered State Matches Live State   | Yes (exact match)  |
+
+Run it yourself — the numbers above will vary slightly by machine, but the integrity and recovery checks should always report `SUCCESS`.
+
+---
+
+## 🎯 Learning Outcomes
+
+This project explores concepts found in banking platforms, payment processors, trading engines, and database systems: concurrent programming, OS-level synchronization, deadlock prevention, durable logging, and fault-tolerant recovery design.
 
 ---
 
 👨‍💻 **Author**
 
-**Krishna Parmar**  
-B.Tech ICT Student  
-Dhirubhai Ambani University
+**Krishna Parmar**
+B.Tech ICT Student, Dhirubhai Ambani University
